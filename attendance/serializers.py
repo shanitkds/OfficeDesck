@@ -3,39 +3,49 @@ from .utils.face_utils import get_face_encoding #,verify_face
 # from .utils.location_utils import verify_location
 from .services import get_today_attentance #,get_organisation
 from .models import Attendance,AttendanceRequest
+from account.models import User
 
 
-class FaceEntrollSerializer(serializers.Serializer):
-    face_image=serializers.ImageField()
-    
-    def save(self,user):
-        if user.user_type=='EMPLOYEE':
-            if user.employee.face_encode:
-                raise serializers.ValidationError("Face already registered. Contact admin.")
-            encode=get_face_encoding(self.validated_data["face_image"])
-            user.employee.face_encode=encode
-            user.employee.save()
-        elif user.user_type=='TEAM_LEAD':
-            if user.teamlead.face_encode:
-                raise serializers.ValidationError("Face already registered. Contact admin.")
-            encode=get_face_encoding(self.validated_data["face_image"])
-            user.teamlead.face_encode=encode
-            user.teamlead.save()
-        elif user.user_type=='HR':
-            if user.hr.face_encode:
-                raise serializers.ValidationError("Face already registered. Contact admin.")
-            encode=get_face_encoding(self.validated_data["face_image"])
-            user.hr.face_encode=encode
-            user.hr.save()
-        elif user.user_type=='ACCOUNTANT':
-            if user.accountant.face_encode:
-                raise serializers.ValidationError("Face already registered. Contact admin.")
-            encode=get_face_encoding(self.validated_data["face_image"])
-            user.accountant.face_encode=encode
-            user.accountant.save()
+class AdminFaceEnrollSerializer(serializers.Serializer):
+    employee_id = serializers.CharField()
+    face_image = serializers.ImageField()
+
+    def save(self, admin_user):
+
+        if admin_user.user_type != "ORG_ADMIN":
+            raise serializers.ValidationError("Only admin can set face")
+
+        emp_id = self.validated_data["employee_id"]
+        face_img = self.validated_data["face_image"]
+
+        try:
+            user = User.objects.get(employee_id=emp_id)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("User not found")
+
+        if user.user_type == "EMPLOYEE":
+            profile = user.employee
+
+        elif user.user_type == "TEAM_LEAD":
+            profile = user.teamlead
+
+        elif user.user_type == "HR":
+            profile = user.hr
+
+        elif user.user_type == "ACCOUNTANT":
+            profile = user.accountant
+
         else:
-            raise serializers.ValidationError("Invalid user type for face enrollment")
+            raise serializers.ValidationError("Invalid user type")
+
+
+        encode = get_face_encoding(face_img)
+        profile.face_encode = encode
+        profile.save()
+
         return user
+
+
     
 # class FaceVerifySerializer(serializers.Serializer):
 #     face_image = serializers.ImageField()
@@ -141,8 +151,25 @@ class AttentanceRequestActionSeriolaizer(serializers.Serializer):
         return attrs
     
 class ManualAttendanceUpsertSerializer(serializers.Serializer):
-    user_id = serializers.IntegerField()
+    employee_id = serializers.CharField()
     date = serializers.DateField()
     status = serializers.ChoiceField(
         choices=['FULL_DAY', 'HALF_DAY', 'ABSENT']
     )
+    
+    
+    
+
+class AttendanceViewSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="user.name")
+    employee_id = serializers.CharField(source="user.employee_id")
+
+    class Meta:
+        model = Attendance
+        fields = [
+            "date",
+            "status",
+            "name",
+            "employee_id",
+            "updated_at",
+        ]

@@ -31,6 +31,7 @@ urlpatterns = [
     path("api/chat/", include("chat.urls")),
     path("api/encryptfile/", include("secure_files.urls")),
     path("api/performance/", include("performance.urls")),
+    path("api/report/", include("reports.urls")),
 
 ]
 

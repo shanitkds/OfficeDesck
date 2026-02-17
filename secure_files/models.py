@@ -33,7 +33,7 @@ class FileShare(models.Model):
     shared_with=models.ForeignKey(User,on_delete=models.CASCADE,related_name="files_shared_with_me",null=True,blank=True)
     message=models.CharField(null=True,blank=True)
     can_view=models.BooleanField(default=True)
-    can_download = models.BooleanField(default=False)
+    can_download = models.BooleanField(default=True)
     
     shared_by=models.ForeignKey(User,on_delete=models.CASCADE, related_name="files_shared_by_me")
     shared_at = models.DateTimeField(auto_now_add=True)

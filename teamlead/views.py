@@ -17,6 +17,32 @@ class TeamViewApi(APIView):
     
     def get(self,request):
         user=request.user
+        
+        if user.user_type in ["ORG_ADMIN","HR"]:
+            org = get_organisation(user)
+
+            teamleads = TeamLead.objects.filter(
+                organization=org
+            ).select_related("user")
+
+            data = []
+
+            for tl in teamleads:
+                members = Employee.objects.filter(
+                    team_lead=tl,
+                    organization=org
+                ).select_related("user")
+
+                data.append({
+                    "team_lead": TeamLeadSerialise(tl).data,
+                    "team_members": TeamMembersSerialiser(
+                        members, many=True
+                    ).data
+                })
+
+            return Response(data)
+        # ---------------------------------------------------------
+        
         tem_lead=self.get_teamlead(user)
         
         if not tem_lead:

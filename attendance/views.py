@@ -1,17 +1,19 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework  import status
-from .serializers import FaceEntrollSerializer,MarkAttendanceSerializer,AttendanceSerializer,AttendanceRequestCreateSerializer,AttentanceRequestViewSerializer,AttentanceRequestActionSeriolaizer
+from .serializers import AdminFaceEnrollSerializer,MarkAttendanceSerializer,AttendanceSerializer,AttendanceRequestCreateSerializer,AttentanceRequestViewSerializer,AttentanceRequestActionSeriolaizer,AttendanceViewSerializer
 from rest_framework.exceptions import PermissionDenied
 from .utils.face_utils import verify_face
 from .utils.location_utils import verify_location
 from .services import get_organisation,prossess_attentance,handle_attendance_request_action
-from .models import AttendanceRequest
+from .models import AttendanceRequest,Attendance
 from django.db.models import Q
 from account.models import User
 from django.shortcuts import get_object_or_404
 from .serializers import ManualAttendanceUpsertSerializer
 from .services import manual_attendance_upsert
+from datetime import datetime
+from django.db.models import Count
 
 # from organizations.models import Oganisation
 # from django.db.models import Exists, OuterRef
@@ -23,17 +25,27 @@ from .services import manual_attendance_upsert
 
 
 
+class SetFaceAPIView(APIView):
 
+    def post(self, request):
 
-class FaceEnrollAPIView(APIView):
-    def post(self,request):
-        serialiser=FaceEntrollSerializer(data=request.data)
-        print(request.user.employee.face_encode)
-        if serialiser.is_valid():
-            serialiser.save(user=request.user)
-            return Response({"message": "Face registered successfully"},status=status.HTTP_201_CREATED)
-        return Response({"not working"},status=status.HTTP_400_BAD_REQUEST)
-    
+        if request.user.user_type not in ["ORG_ADMIN","HR"]:
+            return Response(
+                {"error": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = AdminFaceEnrollSerializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save(admin_user=request.user)
+            return Response(
+                {"message": "Face registered successfully"},
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 # class FaceVerfyAPIView(APIView):
 #     def post(self,request):
 #         serializer=FaceVerifySerializer(data=request.data,context={"user": request.user})
@@ -178,7 +190,7 @@ class ManualAttendanceUpsertAPIView(APIView):
 
         target_user = get_object_or_404(
             User,
-            id=serializer.validated_data['user_id']
+            employee_id=serializer.validated_data['employee_id']
         )
 
         attendance, created = manual_attendance_upsert(
@@ -198,3 +210,61 @@ class ManualAttendanceUpsertAPIView(APIView):
             },
             status=status.HTTP_200_OK
         )
+        
+        
+
+
+class AttendanceViewAPI(APIView):
+
+    def get(self, request):
+
+        employee_id = request.GET.get("employee_id")
+        month = request.GET.get("month")  
+        user = request.user
+
+        org = get_organisation(user)
+
+        
+        if user.user_type in ["ORG_ADMIN", "HR"]:
+            
+            if employee_id:
+                try:
+                    target_user = User.objects.get(employee_id=employee_id)
+                except User.DoesNotExist:
+                    return Response({"error": "User not found"}, status=404)
+
+            else:
+                # HR viewing own attendance
+                target_user = user
+
+        # ---------- NORMAL USERS ----------
+        else:
+            target_user = user
+
+
+        # ---------- FILTER ATTENDANCE ----------
+        records = Attendance.objects.filter(user=target_user)
+
+        if month:
+            try:
+                year, mon = month.split("-")
+                records = records.filter(
+                    date__year=year,
+                    date__month=mon
+                )
+            except:
+                return Response({"error": "Invalid month format YYYY-MM"}, status=400)
+
+        records = records.order_by("date")
+
+        serializer = AttendanceViewSerializer(records, many=True)
+
+        summary = records.values("status").annotate(total=Count("id"))
+
+        return Response({
+            "viewer": user.name,
+            "target_user": target_user.name,
+            "employee_id": target_user.employee_id,
+            "attendance": serializer.data,
+            "summary": summary
+        })

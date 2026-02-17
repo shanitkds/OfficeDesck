@@ -12,3 +12,4 @@ urlpatterns = [
     path('group/messages/<int:gr_id>/',GroupeMessageGetAPIView.as_view(),name="gr-messages"),
     path('group/list/',ChatGroupListAPIView.as_view(),name="gr-list"),
 ]
+

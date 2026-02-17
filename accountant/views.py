@@ -1,11 +1,12 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import ExplanseClimeRequestSerialicer,ExpenseRejectAsseptSerializer,ExpenceViewSerializer,SalaryUpdateSerializer
-from .models import Expense,SalaryStrucher
+from .serializers import ExplanseClimeRequestSerialicer,ExpenseRejectAsseptSerializer,ExpenceViewSerializer,SalaryVieweSerializer,PaimentTableSerializer
+from .models import Expense,SalaryStrucher,Payment
 from attendance.services import get_organisation
 from .services import add_expense_to_payment
 from django.shortcuts import get_object_or_404
+from account.models import User
 
 # Create your views here.
 
@@ -28,7 +29,7 @@ class ExpemseClimeRequestAPIView(APIView):
         user=request.user
         org=get_organisation(user)
         
-        if user.user_type=='ACCOUNTANT':
+        if user.user_type in ['ACCOUNTANT','ORG_ADMIN']:
             expenses=Expense.objects.filter(organization=org).order_by('-created_at')
         else:
             expenses=Expense.objects.filter(
@@ -85,63 +86,97 @@ class ExpenceApprovelAPIView(APIView):
         serializer=ExpenceViewSerializer(expenses,many=True)
         return Response(serializer.data,status=status.HTTP_200_OK)
     
-class SalaryAddAPIView(APIView):
-    def patch(self, request):
-        user = request.user
 
-        if user.user_type != 'ACCOUNTANT':
+class SalaryAddAPIView(APIView):
+
+    def patch(self, request):
+        login_user = request.user
+
+        if login_user.user_type not in ["ACCOUNTANT", "ORG_ADMIN"]:
             return Response(
-                {"detail": "Only accountant can add or update salary."},
+                {"detail": "Only accountant or admin can add/update salary"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        org = get_organisation(user)
-        target_user = request.data.get('user')
+        org = get_organisation(login_user)
 
-        if not target_user:
-            return Response(
-                {"detail": "User is required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        emp_id = request.data.get("employee_id")
+        basic = request.data.get("basic_salary")
+        hra = request.data.get("hra")
+        allowance = request.data.get("allowance")
+        deduction = request.data.get("deduction")
 
-        salary = SalaryStrucher.objects.filter(
+        if not emp_id:
+            return Response({"detail": "Employee ID required"}, status=400)
+
+        try:
+            target_user = User.objects.get(employee_id=emp_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Employee not found"}, status=404)
+
+
+        basic = basic or 0
+        hra = hra or 0
+        allowance = allowance or 0
+        deduction = deduction or 0
+
+        salary, created = SalaryStrucher.objects.update_or_create(
             user=target_user,
-            organization=org
-        ).first()
+            organization=org,
+            defaults={
+                "basic_salary": basic,
+                "hra": hra,
+                "allowance": allowance,
+                "deduction": deduction,
+            }
+        )
 
-        if salary:
-            serializer = SalaryUpdateSerializer(
-                salary,
-                data=request.data,
-                partial=True
-            )
-            action = "updated"
+        msg = "Salary created" if created else "Salary updated"
+        return Response({"message": msg}, status=200)
 
-        else:
-            serializer = SalaryUpdateSerializer(data=request.data)
-            action = "created"
 
-        if serializer.is_valid():
-            serializer.save(organization=org)
-            return Response(
-                {"message": f"Salary {action} successfully"},
-                status=status.HTTP_200_OK
-            )
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-class ViewUniqSalary(APIView):
-    def get(self,request,id):
+class ViewSalary(APIView):
+    def get(self,request):
         user=request.user
         org=get_organisation(user)
         
-        if user.user_type !='ACCOUNTANT':
+        if user.user_type not in ['ACCOUNTANT','ORG_ADMIN']:
             return Response( {"detail": "You do not have permission to view this salary."},status=status.HTTP_403_FORBIDDEN)
         
-        salary=get_object_or_404(SalaryStrucher,user_id=id,organization=org)
+        salary=SalaryStrucher.objects.filter(organization=org)
         print(salary)
-        serializer=SalaryUpdateSerializer(salary)
+        serializer=SalaryVieweSerializer(salary,many=True)
         return Response(serializer.data)
-        
+
+
+class PaymentSettings(APIView):
+
+    def get(self, request):
+        user = request.user
+        org = get_organisation(user)
+
+        month = request.GET.get("month")
+        salary_type = request.GET.get("salary")   # my / all
+
+        payments = Payment.objects.filter(organization=org)
+
+        if month:
+            year, mon = month.split("-")
+            payments = payments.filter(
+                month__year=year,
+                month__month=mon
+            )
+
+        if user.user_type in ["ACCOUNTANT", "ORG_ADMIN"]:
+
+            if salary_type == "my":
+                payments = payments.filter(user=user)
+
+        else:
+            payments = payments.filter(user=user)
+
+        serializer = PaimentTableSerializer(payments, many=True)
+        return Response(serializer.data)
         
         

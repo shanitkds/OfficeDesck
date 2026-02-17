@@ -53,7 +53,7 @@ def can_share_file(user,file):
     if user_role == 'EMPLOYEE':
         return False
     
-    if user_role=='ORG_ADMIN':
+    if user_role in ['ORG_ADMIN','HR','ACCOUNTANT']:
         return True
     
     if file.owner==user and file.allow_share:

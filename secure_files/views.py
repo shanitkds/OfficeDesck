@@ -14,6 +14,9 @@ from .permissions.encryption import genarate_file_KEY,encrpt_file,decript_file,e
 from django.core.files.base import ContentFile
 from django.http import HttpResponse
 
+from .serializers import SecureFileSerializer,ShareHistorySerializer,SharedWithMeSerializer
+from .servise import get_user_image
+
 
 
 
@@ -40,7 +43,7 @@ class FileUploadAPIView(APIView):
             encrypted_file_key=encrypt_file_key,
             owner=user,
             owner_role=user.user_type,
-                team_lead=getattr(getattr(user,'employee',None),'team_lead',None),
+            team_lead=getattr(getattr(user,'employee',None),'team_lead',None),
             organization=get_organisation(user),
             allow_view=True,
             allow_download=True,
@@ -232,11 +235,11 @@ class ShareFileDownloadAPIView(APIView):
     
     
 class AddSharedFileToSecureFilesAPIView(APIView):
-    def post(self,request,share_id):
+    def post(self,request,file_id):
         user=request.user
         file_share=get_object_or_404(
             FileShare,
-            Q(id=share_id),
+            Q(id=file_id),
             Q(shared_with=user) | Q(shared_by=user),
             can_view=True,
             can_download=True
@@ -256,9 +259,9 @@ class AddSharedFileToSecureFilesAPIView(APIView):
             file_type=file.file_type,
             mime_type=file.mime_type,
             encrypted_file=file.encrypted_file,
-            owner=file.owner,
-            owner_role=file.owner_role,
-            team_lead=file.team_lead,
+            owner=user,
+            owner_role=user.user_type,
+            team_lead=getattr(getattr(user,'employee',None),'team_lead',None),
             organization=file.organization,
             allow_view=True,
             allow_download=True,
@@ -267,7 +270,7 @@ class AddSharedFileToSecureFilesAPIView(APIView):
         
         return Response({"message": "File added to your files successfully","file_id": new_file.id},status=status.HTTP_201_CREATED)
     
-    def file_delete(self,request, file_id):  #File delete section
+    def delete(self,request, file_id):  #File delete section
         user = request.user
         file_obj=get_object_or_404(SecureFile,id=file_id)
         if not file_delete_permition(user,file_obj):
@@ -281,3 +284,137 @@ class AddSharedFileToSecureFilesAPIView(APIView):
             {"message": "File deleted successfully"},
             status=status.HTTP_200_OK
         )
+        
+
+
+class MyFilesAPIView(APIView):
+
+    def get(self, request):
+        user = request.user
+        org = get_organisation(user)
+
+        filter_type = request.GET.get("type", "all")
+       
+        if user.user_type == "ORG_ADMIN":
+
+            if filter_type == "my":
+                files = SecureFile.objects.filter(owner=user)
+
+            else:  
+                files = SecureFile.objects.filter(organization=org)
+
+       
+        elif user.user_type == "TEAM_LEAD":
+
+            teamlead_obj = getattr(user, "teamlead", None)
+
+            team_files = SecureFile.objects.filter(team_lead=teamlead_obj)
+            own_files = SecureFile.objects.filter(owner=user)
+
+            if filter_type == "my":
+                files = own_files
+            else:
+                files = (team_files | own_files).distinct()
+
+       
+        else:
+            files = SecureFile.objects.filter(owner=user)
+
+        serializer = SecureFileSerializer(
+            files,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response(serializer.data)
+
+    
+class SharedFilesAPIView(APIView):
+
+    def get(self, request):
+        user = request.user
+
+        shared_with_me = FileShare.objects.filter(
+            shared_with=user
+        ).select_related(
+            "file",
+            "file__owner",
+            "shared_by"
+        )
+
+        serializer = SharedWithMeSerializer(
+            shared_with_me,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response(serializer.data)
+
+    
+    
+class ShareHistoryAPIView(APIView):
+
+    def get(self, request):
+        user = request.user
+
+        if user.user_type != "ORG_ADMIN":
+            return Response(
+                {"error": "Permission denied"},
+                status=403
+            )
+
+        org = get_organisation(user)
+
+        history = FileShare.objects.filter(
+            file__organization=org
+        ).select_related("file", "shared_with", "shared_by")
+
+        serializer = ShareHistorySerializer(history, many=True)
+        return Response(serializer.data)
+
+
+
+class ShareAllowedUsersAPIView(APIView):
+
+    def get(self, request, file_id):
+        current_user = request.user
+        org = get_organisation(current_user)
+
+       
+        if current_user.user_type == "EMPLOYEE":
+            return Response([])
+
+        if current_user.user_type in ["ORG_ADMIN", "HR", "ACCOUNTANT"]:
+            users = User.objects.filter(
+                Q(employee__organization=org) |
+                Q(hr__organization=org) |
+                Q(teamlead__organization=org) |
+                Q(accountent__organization=org) |
+                Q(organisation_admin__organization=org)   # ✅ FIXED TYPO
+            ).distinct()
+
+        elif current_user.user_type == "TEAM_LEAD":
+            users = User.objects.filter(
+                employee__team_lead=current_user.teamlead
+            )
+
+        else:
+            users = User.objects.none()
+
+        data = []
+
+        for u in users:
+            if u == current_user:
+                continue
+
+            image_url = get_user_image(u, request)
+
+            data.append({
+                "id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "user_type": u.user_type,
+                "image": image_url,
+            })
+
+        return Response(data)

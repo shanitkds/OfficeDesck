@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Expense,SalaryStrucher
+from .models import Expense,SalaryStrucher,Payment
 from attendance.services import get_organisation
 
 class ExplanseClimeRequestSerialicer(serializers.ModelSerializer):
@@ -29,17 +29,50 @@ class ExpenseRejectAsseptSerializer(serializers.ModelSerializer):
         
 class ExpenceViewSerializer(serializers.ModelSerializer):
     user_name=serializers.CharField(source='user.name', read_only=True)
+    user_employee_id=serializers.CharField(source='user.employee_id', read_only=True)
     class Meta:
         model=Expense
-        fields=['id','user_name','amount','description','status','accountant_remark','created_at']
+        fields=['id','user_name','user_employee_id','amount','description','status','accountant_remark','created_at']
         
-class SalaryUpdateSerializer(serializers.ModelSerializer):
+class SalaryVieweSerializer(serializers.ModelSerializer):
+
+    user_name = serializers.CharField(source="user.name", read_only=True)
+    user_employee_id = serializers.CharField(source="user.employee_id", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    user_mobile = serializers.CharField(source="user.phone", read_only=True)
+
     class Meta:
-        model=SalaryStrucher
+        model = SalaryStrucher
         fields = [
             'user',
+            'user_name',
+            'user_employee_id',
+            'user_email',
+            'user_mobile',
             'basic_salary',
             'hra',
             'allowance',
             'deduction'
+        ]
+        
+class PaimentTableSerializer(serializers.ModelSerializer):
+
+    user_name = serializers.CharField(source="user.name", read_only=True)
+    user_employee_id = serializers.CharField(source="user.employee_id", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    user_mobile = serializers.CharField(source="user.phone", read_only=True)
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "user_name",
+            "user_employee_id",
+            "user_email",
+            "user_mobile",
+            "month",
+            "salary_amount",
+            "expense_amount",
+            "total_amount",
+            "status",
         ]
