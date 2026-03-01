@@ -1,51 +1,52 @@
 from rest_framework import serializers
 from account.models import User
-from .models import Oganisation
+from .models import Oganisation,OrganizationRequest
 from org_admin.models import Organisation_admin
 import uuid
+from django.contrib.auth.hashers import make_password
 
 
 
-class OrganisationRegistrationSerialiser(serializers.Serializer):
-    org_name=serializers.CharField(max_length=200)
-    org_email=serializers.EmailField()
-    org_phone=serializers.CharField(max_length=200)
-    org_address=serializers.CharField()
-    org_registration_number=serializers.CharField(required=False, allow_blank=True)
+# class OrganisationRegistrationSerialiser(serializers.Serializer):
+#     org_name=serializers.CharField(max_length=200)
+#     org_email=serializers.EmailField()
+#     org_phone=serializers.CharField(max_length=200)
+#     org_address=serializers.CharField()
+#     org_registration_number=serializers.CharField(required=False, allow_blank=True)
     
-    # Admin fieald
-    org_admin_name = serializers.CharField(max_length=50)
-    org_admin_email=serializers.EmailField()
-    org_admin_password=serializers.CharField(write_only=True)
+#     # Admin fieald
+#     org_admin_name = serializers.CharField(max_length=50)
+#     org_admin_email=serializers.EmailField()
+#     org_admin_password=serializers.CharField(write_only=True)
     
     
     
-    def create(self, validated_data):
+#     def create(self, validated_data):
         
-        organisation=Oganisation.objects.create(
-            name=validated_data["org_name"],
-            email=validated_data["org_email"],
-            phone=validated_data["org_phone"],
-            address=validated_data["org_address"],
-            registration_number=validated_data["org_registration_number"]
-        )
+#         organisation=Oganisation.objects.create(
+#             name=validated_data["org_name"],
+#             email=validated_data["org_email"],
+#             phone=validated_data["org_phone"],
+#             address=validated_data["org_address"],
+#             registration_number=validated_data["org_registration_number"]
+#         )
         
-        admin_employee_id = f"ADM-{uuid.uuid4().hex[:8]}"
+#         admin_employee_id = f"ADM-{uuid.uuid4().hex[:8]}"
         
-        user=User.objects.create_user(
-            name=validated_data["org_admin_name"],
-            email=validated_data["org_admin_email"],
-            password=validated_data["org_admin_password"],      
-            employee_id=admin_employee_id,
-            user_type="ORG_ADMIN",
-        )
+#         user=User.objects.create_user(
+#             name=validated_data["org_admin_name"],
+#             email=validated_data["org_admin_email"],
+#             password=validated_data["org_admin_password"],      
+#             employee_id=admin_employee_id,
+#             user_type="ORG_ADMIN",
+#         )
         
-        Organisation_admin.objects.create(
-            user=user,
-            organization=organisation
-        )
+#         Organisation_admin.objects.create(
+#             user=user,
+#             organization=organisation
+#         )
         
-        return organisation
+#         return organisation
 
 class SetLocationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,3 +64,18 @@ class SetLocationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Invalid longitude")
             
         return attrs
+    
+
+class OrganizationRequestSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = OrganizationRequest
+        fields = "__all__"
+        read_only_fields = ("status", "approved_by", "created_at", "updated_at")
+
+    def create(self, validated_data):
+        # hash admin password
+        validated_data["admin_password"] = make_password(
+            validated_data["admin_password"]
+        )
+        return super().create(validated_data)

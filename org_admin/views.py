@@ -5,6 +5,8 @@ from rest_framework import status
 from attendance.services import get_organisation
 from account.models import User
 from django.db.models import Q
+from employee.models import Employee
+from teamlead.models import TeamLead
 
 
 
@@ -26,7 +28,7 @@ class OrgAdminCreateUserAPIView(APIView):
     
     def get(self, request, user_id=None):
 
-        if request.user.user_type not in ["ORG_ADMIN","HR"]:
+        if request.user.user_type not in ["ORG_ADMIN","HR","ACCOUNTANT"]:
             return Response(
                 {"error": "Permission denied"},
                 status=status.HTTP_403_FORBIDDEN
@@ -62,8 +64,8 @@ class OrgAdminCreateUserAPIView(APIView):
             Q(employee__organization=org) |
             Q(hr__organization=org) |
             Q(teamlead__organization=org) |
-            Q(accountent__organization=org) |
-            Q(organisation_admin__organization=org)
+            Q(accountent__organization=org) 
+            # Q(organisation_admin__organization=org)
         ).distinct()
 
         serializer = OrgAdminUserListSerializer(
@@ -74,7 +76,7 @@ class OrgAdminCreateUserAPIView(APIView):
         return Response(serializer.data)
 
     
-    def patch(self, request, user_id):
+    def patch(self,request,user_id):
         if request.user.user_type != "ORG_ADMIN":
             return Response({"error": "Permission denied"},
                             status=status.HTTP_403_FORBIDDEN)
@@ -105,8 +107,8 @@ class OrgAdminCreateUserAPIView(APIView):
             profile = user.teamlead
         elif hasattr(user, "accountent"):
             profile = user.accountent
-        # elif hasattr(user, "organisation_admin"):
-        #     profile = user.organisation_admin
+        elif hasattr(user, "organisation_admin"):
+            profile = user.organisation_admin
         
 
         if profile:
@@ -156,3 +158,42 @@ class AssineEmployToTeamLeagAPIView(APIView):
             return Response({"message":"Employee assigned to Team Lead successfully","employ_id":employee.user.name,"team_lead":employee.team_lead.user.name},
                             status=status.HTTP_201_CREATED)
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+    
+
+# class EmployeeListByTypeAPIView(APIView):
+#     def get(self, request, user_type):
+
+#         if request.user.user_type != "ORG_ADMIN":
+#             return Response(
+#                 {"error": "Not allowed"},
+#                 status=status.HTTP_403_FORBIDDEN
+#             )
+
+#         organisation = get_organisation(request.user)
+        
+        
+#         if user_type == 'employee':
+#             users = Employee.objects.filter(
+#                 organization=organisation,
+#             )
+#         elif user_type == 'teamlead':
+#             users = TeamLead.objects.filter(
+#                 organization=organisation
+#             )
+#         else:
+#             return Response({"error":"Error"})
+
+#         data = [
+#             {
+#                 "id": e.id,
+#                 "name": e.user.name,
+#                 "employee_id": e.user.employee_id,
+#                 "role": e.user.user_type,
+#                 "department":e.department,
+#                 "desigination":e.desigination,
+#                 "photo": e.photo.url if e.photo else None
+#             }
+#             for e in users
+#         ]
+
+#         return Response(data)

@@ -124,7 +124,7 @@ class ExportFileAPIView(APIView):
         shared_with_id=request.data.get('shared_with')
         message=request.data.get('message',"")
         can_view=request.data.get('can_view',True)
-        can_download =request.data.get('can_download',False)
+        can_download =request.data.get('can_download',True)
         
         if not shared_with_id:
             return Response(

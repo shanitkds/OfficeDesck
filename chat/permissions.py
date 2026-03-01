@@ -11,10 +11,10 @@ def same_organisation(user1,user2):
 
 def can_private_chat(sender,receiver):
     rules={
-        "EMPLOYEE": ["TEAM_LEAD", "HR"],
-        "TEAM_LEAD": ["EMPLOYEE", "HR", "ORG_ADMIN"],
+        "EMPLOYEE": ["TEAM_LEAD", "HR","ORG_ADMIN","ACCOUNTANT"],
+        "TEAM_LEAD": ["EMPLOYEE", "HR", "ORG_ADMIN","ACCOUNTANT"],
         "HR": ["EMPLOYEE", "TEAM_LEAD", "ACCOUNTANT", "ORG_ADMIN"],
-        "ACCOUNTANT": ["HR", "ORG_ADMIN"],
+        "ACCOUNTANT": ["HR", "ORG_ADMIN","EMPLOYEE","TEAM_LEAD"],
         "ORG_ADMIN": ["EMPLOYEE", "TEAM_LEAD", "HR", "ACCOUNTANT"],
     }
     

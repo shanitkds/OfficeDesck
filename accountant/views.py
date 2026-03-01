@@ -15,7 +15,7 @@ class ExpemseClimeRequestAPIView(APIView):
         user=request.user
         
         if user.user_type=='SUPER_ADMIN':
-            return Response({"You have no access"},status=status.HTTP_403_FORBIDDEN)
+            return Response({"error":"You have no access"},status=status.HTTP_403_FORBIDDEN)
         serializer=ExplanseClimeRequestSerialicer(data=request.data,context={"user":request.user})
         if serializer.is_valid():
             serializer.save()
@@ -28,9 +28,13 @@ class ExpemseClimeRequestAPIView(APIView):
     def get(self,request): #get expence as list
         user=request.user
         org=get_organisation(user)
+        type=request.GET.get('type')
         
         if user.user_type in ['ACCOUNTANT','ORG_ADMIN']:
-            expenses=Expense.objects.filter(organization=org).order_by('-created_at')
+            if type=="my":
+                expenses=Expense.objects.filter(organization=org,user=user).order_by('-created_at')
+            else:
+                expenses=Expense.objects.filter(organization=org).order_by('-created_at')
         else:
             expenses=Expense.objects.filter(
                 user=user,
@@ -179,4 +183,44 @@ class PaymentSettings(APIView):
         serializer = PaimentTableSerializer(payments, many=True)
         return Response(serializer.data)
         
+    # def post(self,request):
         
+
+
+    def patch(self, request):
+        user = request.user
+        org = get_organisation(user)
+
+        payment_id = request.data.get("id")
+        new_status = request.data.get("status", "PAID")
+        month = request.data.get("month")
+        year = request.data.get("year")
+
+        if payment_id:
+            payment = get_object_or_404(Payment, organization=org, id=payment_id)
+            payment.status = new_status
+            payment.save()
+            return Response({"message": "Single payment updated"}, status=status.HTTP_200_OK)
+
+        if month and year:
+            try:
+                month = int(month)
+                year = int(year)
+            except ValueError:
+                return Response({"error": "Invalid month/year"}, status=400)
+
+            updated = Payment.objects.filter(
+                organization=org,
+                created_at__month=month,
+                created_at__year=year
+            ).update(status=new_status)
+
+            return Response(
+                {"message": f"{updated} payments updated for {month}/{year}"},
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            {"error": "Provide id OR month and year"},
+            status=status.HTTP_400_BAD_REQUEST
+        )

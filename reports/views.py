@@ -9,6 +9,14 @@ from .utils.performance_tables import performance_list_table
 from attendance.services import get_organisation
 from performance.services.performence_quer_set import get_performance_queryset
 from datetime import date
+from django.http import FileResponse
+from accountant.models import Payment
+from attendance.models import Attendance
+from io import BytesIO
+from reportlab.lib.units import inch
+from django.db.models import Count
+
+
 
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -125,3 +133,240 @@ class PerformanceListPDFAPIView(APIView):
         
         doc.build(elements)
         return report
+    
+    
+    
+class PaymentReportPDF(APIView):
+    def get(self, request):
+        user = request.user
+        org = get_organisation(user) 
+        
+        month = request.GET.get("month")
+        salary_type = request.GET.get("salary")
+        payments = Payment.objects.filter(organization=org)
+
+        if month:
+            year, mon = month.split("-")
+            payments = payments.filter(month__year=year, month__month=mon)
+
+        if user.user_type not in ["ACCOUNTANT", "ORG_ADMIN"] or salary_type == "my":
+            payments = payments.filter(user=user)
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=A4,
+            rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30
+        )
+        
+        styles = getSampleStyleSheet()
+        elements = []
+
+        title_style = ParagraphStyle(
+            'MainTitle',
+            parent=styles['Title'],
+            fontSize=22,
+            textColor=colors.HexColor("#2E5077"), 
+            spaceAfter=10
+        )
+        
+        org_style = ParagraphStyle(
+            'OrgName',
+            parent=styles['Normal'],
+            fontSize=14,
+            textColor=colors.HexColor("#4DA1A9"), 
+            alignment=1, 
+            spaceAfter=12
+        )
+
+        desc_style = ParagraphStyle(
+            'Description',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14,
+            textColor=colors.grey,
+            spaceAfter=20
+        )
+
+       
+        elements.append(Paragraph("FINANCIAL DISBURSEMENT REPORT", title_style))
+        elements.append(Paragraph(f" {org.name}", org_style))
+        
+        report_desc = (
+            f"This document contains the official payment records for the period of {month if month else 'All Time'}. "
+            "It includes a breakdown of base salaries, reimbursement expenses, and final disbursement totals "
+            "approved by the finance department."
+        )
+        elements.append(Paragraph(report_desc, desc_style))
+        elements.append(Spacer(1, 10))
+
+       
+        data = [
+            ["Employee", "Emp ID", "Period", "Salary", "Expense", "Total", "Status"]
+        ]
+
+        for p in payments:
+            data.append([
+                p.user.name,
+                p.user.employee_id,
+                p.month.strftime("%b %Y"), 
+                f"{p.salary_amount:,.2f}",
+                f"{p.expense_amount:,.2f}",
+                f"{p.total_amount:,.2f}",
+                p.status.upper()
+            ])
+
+      
+        table = Table(data, colWidths=[1.4*inch, 0.8*inch, 1*inch, 0.9*inch, 0.9*inch, 0.9*inch, 0.8*inch])
+        
+        style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2E5077")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#F6F6F6")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor("#E9EDF1")]),
+        ])
+        
+        for i, row in enumerate(data[1:], start=1):
+            if row[6] == "PAID":
+                style.add('TEXTCOLOR', (6, i), (6, i), colors.darkgreen)
+            elif row[6] == "PENDING":
+                style.add('TEXTCOLOR', (6, i), (6, i), colors.darkorange)
+
+        table.setStyle(style)
+        elements.append(table)
+
+        # --- Build PDF ---
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return FileResponse(
+            buffer, 
+            as_attachment=True, 
+            filename=f"Payment_Report_{org.name.replace(' ', '_')}.pdf"
+        )
+        
+
+class AttendanceReportPDF(APIView):
+    def get(self, request):
+        employee_id = request.GET.get("employee_id")
+        month = request.GET.get("month")
+        user = request.user
+        org = get_organisation(user)
+
+        if user.user_type in ["ORG_ADMIN", "HR", "ACCOUNTANT"]:
+            if employee_id:
+                try:
+                    target_user = User.objects.get(employee_id=employee_id)
+                except User.DoesNotExist:
+                    return Response({"error": "User not found"}, status=404)
+            else:
+                target_user = user
+        else:
+            target_user = user
+
+        records = Attendance.objects.filter(user=target_user).order_by("date")
+        if month:
+            try:
+                year, mon = month.split("-")
+                records = records.filter(date__year=year, date__month=mon)
+            except ValueError:
+                return Response({"error": "Invalid month format YYYY-MM"}, status=400)
+
+        summary = records.values("status").annotate(total=Count("id"))
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=A4,
+            rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40
+        )
+        styles = getSampleStyleSheet()
+        elements = []
+
+        title_style = ParagraphStyle(
+            'MainTitle', parent=styles['Title'], fontSize=22, 
+            textColor=colors.HexColor("#2C3E50"), spaceAfter=2
+        )
+        org_style = ParagraphStyle(
+            'OrgSub', parent=styles['Normal'], fontSize=14, 
+            textColor=colors.HexColor("#34495E"), alignment=1, spaceAfter=20
+        )
+        desc_style = ParagraphStyle(
+            'Desc', parent=styles['Normal'], fontSize=10, 
+            leading=14, textColor=colors.darkslategray
+        )
+
+        elements.append(Paragraph("OFFICIAL ATTENDANCE LOG", title_style))
+        elements.append(Paragraph(org.name.upper(), org_style))
+        
+        report_desc = (
+            f"Detailed attendance records for <b>{target_user.name}</b> (ID: {target_user.employee_id}). "
+            f"This document serves as an official record of presence and absence for the period of {month if month else 'All Recorded History'}."
+        )
+        elements.append(Paragraph(report_desc, desc_style))
+        elements.append(Spacer(1, 25))
+
+        data = [["Date", "Day of Week", "Attendance Status"]]
+        
+        for r in records:
+            data.append([
+                r.date.strftime("%d-%m-%Y"),
+                r.date.strftime("%A"),
+                r.status.replace("_", " ")
+            ])
+
+        main_table = Table(data, colWidths=[1.5*inch, 2*inch, 2.2*inch])
+        
+        table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2C3E50")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor("#F9F9F9")]),
+        ])
+
+        for i, row in enumerate(data[1:], start=1):
+            status_val = records[i-1].status
+            
+            if status_val == "FULL_DAY":
+                table_style.add('TEXTCOLOR', (2, i), (2, i), colors.HexColor("#27AE60"))
+                table_style.add('FONTNAME', (2, i), (2, i), 'Helvetica-Bold')
+            elif status_val == "HALF_DAY":
+                table_style.add('TEXTCOLOR', (2, i), (2, i), colors.HexColor("#F39C12"))
+            elif status_val == "ABSENT":
+                table_style.add('TEXTCOLOR', (2, i), (2, i), colors.HexColor("#C0392B"))
+                table_style.add('FONTNAME', (2, i), (2, i), 'Helvetica-Bold')
+            elif status_val == "NOT_MARKED":
+                table_style.add('TEXTCOLOR', (2, i), (2, i), colors.HexColor("#7F8C8D"))
+
+        main_table.setStyle(table_style)
+        elements.append(main_table)
+        
+        # elements.append(Spacer(1, 30))
+        # elements.append(Paragraph("Quick Count Summary", styles["Heading3"]))
+        
+        # summary_lines = []
+        # for s in summary:
+        #     status_label = s['status'].replace("_", " ")
+        #     summary_lines.append(f"<b>{status_label}:</b> {s['total']}")
+        
+        # elements.append(Paragraph(" | ".join(summary_lines), styles["Normal"]))
+
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return FileResponse(
+            buffer, 
+            as_attachment=True, 
+            filename=f"Attendance_{target_user.employee_id}.pdf"
+        )

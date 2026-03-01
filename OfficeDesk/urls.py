@@ -32,6 +32,8 @@ urlpatterns = [
     path("api/encryptfile/", include("secure_files.urls")),
     path("api/performance/", include("performance.urls")),
     path("api/report/", include("reports.urls")),
+    path("api/hr/", include("hr.urls")),
+    path("api/supperadmin/", include("supperuser.urls")),
 
 ]
 

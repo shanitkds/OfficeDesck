@@ -8,6 +8,7 @@ from .models import PerformanceResult
 from performance.services.engine import generate_monthly_performance,month_name_to_number
 from .serializers import ViewPerformenceSerializer
 from .services.performence_quer_set import get_performance_queryset
+from performance.util import is_month_completed
 
 # Create your views here.
 
@@ -30,6 +31,12 @@ class GenaratePerformenceAPIView(APIView):
         employees=Employee.objects.filter(
             organization=organisation
         )
+        
+        if not is_month_completed(month, int(year)):
+            return Response(
+                {"error": f"{month_name} {year} is not completed yet"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         create=0
         skipped=0

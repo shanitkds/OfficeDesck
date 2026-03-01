@@ -12,7 +12,7 @@ class AdminFaceEnrollSerializer(serializers.Serializer):
 
     def save(self, admin_user):
 
-        if admin_user.user_type != "ORG_ADMIN":
+        if admin_user.user_type not in ["ORG_ADMIN",'HR']:
             raise serializers.ValidationError("Only admin can set face")
 
         emp_id = self.validated_data["employee_id"]

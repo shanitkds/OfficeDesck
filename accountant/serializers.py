@@ -32,7 +32,7 @@ class ExpenceViewSerializer(serializers.ModelSerializer):
     user_employee_id=serializers.CharField(source='user.employee_id', read_only=True)
     class Meta:
         model=Expense
-        fields=['id','user_name','user_employee_id','amount','description','status','accountant_remark','created_at']
+        fields=['id','user_name','user_employee_id','amount','description','status','accountant_remark','created_at','bill_file']
         
 class SalaryVieweSerializer(serializers.ModelSerializer):
 

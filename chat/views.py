@@ -9,8 +9,39 @@ from .models import ChatRoom,Message,ChatGroup,ChatGroupMember,GroupMessage
 from attendance.services import get_organisation
 from .serializers import MessageSerializer,ChatRoomListSerializer,GroupMessageSerializer,ChatGroupListSrializer
 from django.db.models import Q
+from secure_files.servise import get_user_image
 
+class GetOrCreateRoomApi(APIView):
+    def post(self, request):
+        sender = request.user
+        receiver_id = request.data.get("receiver_id")
 
+        if not receiver_id:
+            return Response(
+                {"detail": "receiver_id required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        receiver = get_object_or_404(User, id=receiver_id)
+
+        if not same_organisation(sender, receiver):
+            return Response({"detail": "Different organization"}, status=403)
+
+        if not can_private_chat(sender, receiver):
+            return Response({"detail": "Chat not allowed"}, status=403)
+
+        org = get_organisation(sender)
+
+        room, _ = ChatRoom.objects.get_or_create(
+            organization=org,
+            user1=min(sender, receiver, key=lambda x: x.id),
+            user2=max(sender, receiver, key=lambda x: x.id)
+        )
+
+        return Response({
+            "room_id": room.id,
+            "chat_with": receiver.name
+        })
 
 class SentPrivetMessageApi(APIView):
     def post(self,request):
@@ -30,19 +61,25 @@ class SentPrivetMessageApi(APIView):
             return Response({"detail": "Chat not allowed"},status=status.HTTP_403_FORBIDDEN)
         
         org=get_organisation(sender)
-        room,_=ChatRoom.objects.get_or_create(
+        room=ChatRoom.objects.get(
             organization=org,
             user1=min(sender,receiver,key=lambda x:x.id),
             user2=max(sender,receiver,key=lambda x:x.id)
         )
         
-        Message.objects.create(
+        message =Message.objects.create(
             room=room,
             sender=sender,
             text=text
         )
         
-        return Response({"detail": "Message sent", "room_id": room.id})
+        return Response({"detail": "Message sent", 
+                         "room_id": room.id,
+                         "text": message.text,
+                         "sender": sender.id,
+                         "sender_name": sender.name,
+                         "created_at": message.created_at})
+        
     
 class GetPrivetAPIView(APIView):
     def get(self,request,room_id):
@@ -361,3 +398,73 @@ class ChatGroupListAPIView(APIView):
         
         serializer=ChatGroupListSrializer(groups,many=True)
         return Response(serializer.data)
+    
+class AllowedChatUsersAPIView(APIView):
+
+    def get(self, request):
+        user = request.user
+        org = get_organisation(user)
+
+        main_types = [
+            "HR",
+            "ACCOUNTANT"
+        ]
+
+        if user.user_type in main_types:
+
+            users = User.objects.filter(
+                Q(employee__organization=org) |
+                Q(hr__organization=org) |
+                Q(teamlead__organization=org) |
+                Q(accountent__organization=org) |
+                Q(organisation_admin__organization=org)
+            ).exclude(id=user.id).distinct()
+        elif user.user_type == "ORG_ADMIN":
+            users=User.objects.filter(
+                Q(employee__organization=org) |
+                Q(hr__organization=org) |
+                Q(teamlead__organization=org) |
+                Q(accountent__organization=org) |
+                Q(organisation_admin__organization=org)|
+                Q(user_type="SUPER_ADMIN")
+            )
+        elif user.user_type=="SUPER_ADMIN":
+            users=User.objects.filter(
+                user_type="ORG_ADMIN"
+            )
+        elif user.user_type == "EMPLOYEE":
+
+            users = User.objects.filter(
+                Q(employee__team_lead=user.employee.team_lead) |
+                Q(teamlead=user.employee.team_lead) |
+                Q(hr__organization=org) |
+                Q(accountent__organization=org) |
+                Q(organisation_admin__organization=org)
+            ).exclude(id=user.id).distinct()
+        elif user.user_type=="TEAM_LEAD":
+            users = User.objects.filter(
+                Q(employee__team_lead=user.teamlead)|
+                Q(hr__organization=org) |
+                Q(accountent__organization=org) |
+                Q(organisation_admin__organization=org)
+            )
+
+        else:
+            users = User.objects.none()
+        
+        data = []
+        for u in users:
+            if u==user:
+                continue
+            image_url = get_user_image(u, request)
+            data.append({
+                "id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "user_type": u.user_type,
+                "image": image_url,
+            })
+
+        
+
+        return Response(data)

@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'secure_files',
     'performance',
     'reports',
+    'supperuser',
     'rest_framework',
     'rest_framework.authtoken',
 
@@ -112,6 +113,7 @@ REST_FRAMEWORK = {
  ],
  'DEFAULT_PERMISSION_CLASSES': [
  'rest_framework.permissions.IsAuthenticated',
+ 'account.permissions.IsOrganisationActive',
  ],
 }
 
@@ -165,4 +167,12 @@ USE_TZ = True
 STATIC_URL = 'static/'
 AUTH_USER_MODEL = 'account.User'
 
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 

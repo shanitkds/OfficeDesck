@@ -5,6 +5,8 @@ from .models import TeamLead,TeamLeadReview
 from employee.models import Employee
 from .serializers import TeamMembersSerialiser,TeamLeadSerialise,TeamLeadReviewSerializer
 from attendance.services import get_organisation
+from datetime import date
+import calendar
 
 class TeamViewApi(APIView):
     def get_teamlead(self,user):
@@ -61,42 +63,69 @@ class TeamViewApi(APIView):
         return Response({"team_lead":team_head.data,"team_members":employ_data.data})
         
 
+
 class TeamLeadReviewAPIView(APIView):
-    def post(self,request):
-        user=request.user
-        
-        if user.user_type !='TEAM_LEAD':
-            return Response({"detail": "You have no permission"},status=status.HTTP_403_FORBIDDEN)
-        
-        serializer=TeamLeadReviewSerializer(data=request.data)
+    def post(self, request):
+        user = request.user
+
+        if user.user_type != 'TEAM_LEAD':
+            return Response(
+                {"error": "You have no permission"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = TeamLeadReviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        employee=serializer.validated_data['employee']
-        
+
+        employee = serializer.validated_data['employee']
+
         if employee.user_type != 'EMPLOYEE':
-            return Response({"You can review only employees"},status=status.HTTP_400_BAD_REQUEST)
-        
-        user_org=get_organisation(user)
-        employee_org=get_organisation(employee)
-        
-        if user_org !=employee_org:
-            return Response({"Employee belongs to a different organisation"},status=status.HTTP_400_BAD_REQUEST)
-        
-        if employee.employee.team_lead!= user.teamlead:
-            return Response({"This employee is not under your team"},status=status.HTTP_403_FORBIDDEN)
-        
-        review_date=serializer.validated_data["review_month"]
-        
-        exist=TeamLeadReview.objects.filter(
+            return Response(
+                {"error": "You can review only employees"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user_org = get_organisation(user)
+        employee_org = get_organisation(employee)
+
+        if user_org != employee_org:
+            return Response(
+                {"error": "Employee belongs to a different organisation"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if employee.employee.team_lead != user.teamlead:
+            return Response(
+                {"error": "This employee is not under your team"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        review_date = serializer.validated_data["review_month"]
+
+        last_day = calendar.monthrange(review_date.year, review_date.month)[1]
+        last_date_of_month = date(review_date.year, review_date.month, last_day)
+
+        today = date.today()
+
+        if today <= last_date_of_month:
+            return Response(
+                {"error": "You can submit review only after month completed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        exist = TeamLeadReview.objects.filter(
             team_lead=user,
             employee=employee,
             review_month__year=review_date.year,
             review_month__month=review_date.month
         ).exists()
-        
+
         if exist:
-            return Response({"Review already submitted for this employee this month"},status=status.HTTP_403_FORBIDDEN)
-        
+            return Response(
+                {"error": "Review already submitted for this employee this month"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         TeamLeadReview.objects.create(
             organisation=user_org,
             team_lead=user,
@@ -105,5 +134,41 @@ class TeamLeadReviewAPIView(APIView):
             comment=serializer.validated_data.get("comment", ""),
             review_month=review_date
         )
+
+        return Response(
+            {"detail": "Review submitted successfully"},
+            status=status.HTTP_201_CREATED
+        )
         
-        return Response({"detail": "Review submitted successfully"},status=status.HTTP_201_CREATED)
+    def get(self, request):  #list review
+        user = request.user
+
+        if user.user_type in ['ORG_ADMIN', 'HR']:
+            org = get_organisation(user)
+            reviews = TeamLeadReview.objects.filter(organisation=org)
+
+        elif user.user_type == "TEAM_LEAD":
+            teamlead = user.teamlead
+            reviews = TeamLeadReview.objects.filter(team_lead=user)
+
+        elif user.user_type == "EMPLOYEE":
+            reviews = TeamLeadReview.objects.filter(employee=user)
+
+        else:
+            return Response(
+                {"error": "You are not authorized"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = TeamLeadReviewSerializer(reviews, many=True)
+        return Response(serializer.data)
+    
+class UsersListAPIView(APIView):
+    def get(self,request):
+        user=request.user
+        org=get_organisation(user)
+        
+        if user.user_type=='TEAM_LEAD':
+            users=Employee.objects.filter(organization=org,team_lead=user.teamlead)
+        serializer=TeamMembersSerialiser(users,many=True)
+        return Response(serializer.data)

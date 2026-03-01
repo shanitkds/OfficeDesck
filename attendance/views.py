@@ -225,7 +225,7 @@ class AttendanceViewAPI(APIView):
         org = get_organisation(user)
 
         
-        if user.user_type in ["ORG_ADMIN", "HR"]:
+        if user.user_type in ["ORG_ADMIN", "HR","ACCOUNTANT"]:
             
             if employee_id:
                 try:

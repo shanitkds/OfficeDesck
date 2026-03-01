@@ -6,84 +6,102 @@ from teamlead.models import TeamLead
 from employee.models import Employee
 import uuid
 from attendance.services import get_organisation
+import os
+from django.core.files.base import ContentFile
+
+
+def copy_file(old_file):
+    if not old_file:
+        return None
+
+    old_file.open('rb')  
+    content = old_file.read()
+    old_file.close()    
+
+    return ContentFile(
+        content,
+        name=os.path.basename(old_file.name)
+    )
 
 
 class OrgAdminCreatUserSerializer(serializers.Serializer):
+
     name = serializers.CharField(max_length=50)
-    email=serializers.EmailField()
-    password=serializers.CharField(write_only=True)
-    user_type=serializers.ChoiceField(
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    user_type = serializers.ChoiceField(
         choices=["TEAM_LEAD","EMPLOYEE","HR","ACCOUNTANT",'ORG_ADMIN']
     )
-    phone=serializers.CharField()
-    attendance_mode=serializers.ChoiceField(
-        ['FACE_ONLY','FACE_LOCATION']
-    )
+    phone = serializers.CharField()
+    attendance_mode = serializers.ChoiceField(['FACE_ONLY','FACE_LOCATION'])
     photo = serializers.ImageField(required=False)
-    # induvigal table
-    department=serializers.CharField(required=False,allow_null=True,allow_blank=True)
-    desigination=serializers.CharField(required=False,allow_null=True,allow_blank=True)
+    department = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    desigination = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     id_proof = serializers.FileField(required=False)
-    attendance_mode=serializers.CharField()
-    
-    
-    
-    
+
     def create(self, validated_data):
+
+        # ✅ COPY FILES HERE
+        photo_file = copy_file(validated_data.get("photo"))
+        id_file = copy_file(validated_data.get("id_proof"))
+
         employee_id = f"{validated_data['user_type'][:2]}-{uuid.uuid4().hex[:6]}"
-        request=self.context.get("request")
-        or_admin=request.user   
-        organisation=or_admin.organisation_admin.organization
-        
-        
-        
-        user=User.objects.create_user(
+        request = self.context.get("request")
+        or_admin = request.user
+        organisation = or_admin.organisation_admin.organization
+
+        user = User.objects.create_user(
             name=validated_data["name"],
             email=validated_data["email"],
             password=validated_data["password"],
             employee_id=employee_id,
             user_type=validated_data["user_type"],
             phone=validated_data["phone"],
-            individual_attendance_mode=validated_data['attendance_mode']
+            individual_attendance_mode=validated_data["attendance_mode"]
         )
-        
-        if user.user_type=="EMPLOYEE":
+
+        if user.user_type == "EMPLOYEE":
             Employee.objects.create(
                 user=user,
                 organization=organisation,
-                photo=validated_data.get('photo'),
-                id_proof=validated_data.get('id_proof'),
-                department=validated_data["department"],
-                desigination=validated_data["desigination"]
+                photo=photo_file,
+                id_proof=id_file,
+                department=validated_data.get("department"),
+                desigination=validated_data.get("desigination")
             )
-        elif user.user_type=="TEAM_LEAD":
+
+        elif user.user_type == "TEAM_LEAD":
             TeamLead.objects.create(
                 user=user,
                 organization=organisation,
-                photo=validated_data.get('photo'),
-                id_proof=validated_data.get('id_proof'),
-                department=validated_data["department"],
-                desigination=validated_data["desigination"]
+                photo=photo_file,
+                id_proof=id_file,
+                department=validated_data.get("department"),
+                desigination=validated_data.get("desigination")
             )
-        elif user.user_type=="HR":
+
+        elif user.user_type == "HR":
             HR.objects.create(
                 user=user,
                 organization=organisation,
-                photo=validated_data.get('photo'),
-                id_proof=validated_data.get('id_proof'),
-                department=validated_data["department"],
-                desigination=validated_data["desigination"]
+                photo=photo_file,
+                id_proof=id_file,
+                department=validated_data.get("department"),
+                desigination=validated_data.get("desigination")
             )
-        elif user.user_type=="ACCOUNTANT":
+
+        elif user.user_type == "ACCOUNTANT":
             Accountent.objects.create(
                 user=user,
                 organization=organisation,
-                photo=validated_data.get('photo'),
-                id_proof=validated_data.get('id_proof'),
-                department=validated_data["department"],
-                desigination=validated_data["desigination"]
+                photo=photo_file,
+                id_proof=id_file,
+                department=validated_data.get("department"),
+                desigination=validated_data.get("desigination")
             )
+
         return user
+
     
 class AssineEmployToTeamleadSerializer(serializers.Serializer):
     employee_id=serializers.IntegerField()
@@ -158,6 +176,8 @@ class OrgAdminUserListSerializer(serializers.ModelSerializer):
             return obj.hr
         if obj.user_type == "ACCOUNTENT" and hasattr(obj, "accountent"):
             return obj.accountent
+        if obj.user_type=="ORG_ADMIN" and hasattr(obj,"organisation_admin"):
+            return obj.organisation_admin
         return None
 
     def get_image(self, obj):

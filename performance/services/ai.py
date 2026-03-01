@@ -27,7 +27,6 @@ def ai_performance_analysis(attendance, task, review):
 
     final_score = max(0, base_score - consistency_penalty)
 
-    # 5️⃣ Professional HR classification
     if final_score >= 80:
         level = "EXCELLENT"
     elif final_score >= 65:

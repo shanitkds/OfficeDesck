@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import SentPrivetMessageApi,GetPrivetAPIView,ChatRoomListAPIView,GroupManageAPIView,AddGruopMemberAPIView,RemoveGroupAPIView,RemovememberAPIView,GroupeMessageSentAPIView,GroupeMessageGetAPIView,ChatGroupListAPIView
+from .views import SentPrivetMessageApi,GetPrivetAPIView,ChatRoomListAPIView,GroupManageAPIView,AddGruopMemberAPIView,RemoveGroupAPIView,RemovememberAPIView,GroupeMessageSentAPIView,GroupeMessageGetAPIView,ChatGroupListAPIView,AllowedChatUsersAPIView,GetOrCreateRoomApi
 urlpatterns = [
+    path('get-or-create-room/',GetOrCreateRoomApi.as_view()),
     path('send/',SentPrivetMessageApi.as_view(),name="send"),
     path('messages/<int:room_id>/',GetPrivetAPIView.as_view(),name="pr-messages"),
     path('rooms/',ChatRoomListAPIView.as_view(),name="rooms"),
@@ -11,5 +12,7 @@ urlpatterns = [
     path('group/sent/',GroupeMessageSentAPIView.as_view(),name="gr-sent"),
     path('group/messages/<int:gr_id>/',GroupeMessageGetAPIView.as_view(),name="gr-messages"),
     path('group/list/',ChatGroupListAPIView.as_view(),name="gr-list"),
+    path('chatusers/',AllowedChatUsersAPIView.as_view()),
 ]
 
+ 
