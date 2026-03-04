@@ -8,6 +8,7 @@ import uuid
 from attendance.services import get_organisation
 import os
 from django.core.files.base import ContentFile
+from .models import Organisation_admin
 
 
 def copy_file(old_file):
@@ -33,7 +34,11 @@ class OrgAdminCreatUserSerializer(serializers.Serializer):
         choices=["TEAM_LEAD","EMPLOYEE","HR","ACCOUNTANT",'ORG_ADMIN']
     )
     phone = serializers.CharField()
-    attendance_mode = serializers.ChoiceField(['FACE_ONLY','FACE_LOCATION'])
+    attendance_mode = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
     photo = serializers.ImageField(required=False)
     department = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     desigination = serializers.CharField(required=False, allow_null=True, allow_blank=True)
@@ -57,7 +62,7 @@ class OrgAdminCreatUserSerializer(serializers.Serializer):
             employee_id=employee_id,
             user_type=validated_data["user_type"],
             phone=validated_data["phone"],
-            individual_attendance_mode=validated_data["attendance_mode"]
+            individual_attendance_mode=validated_data.get("attendance_mode")    
         )
 
         if user.user_type == "EMPLOYEE":
@@ -98,6 +103,13 @@ class OrgAdminCreatUserSerializer(serializers.Serializer):
                 id_proof=id_file,
                 department=validated_data.get("department"),
                 desigination=validated_data.get("desigination")
+            )
+        elif user.user_type == "ORG_ADMIN":
+            Organisation_admin.objects.create(
+                user=user,
+                organization=organisation,
+                photo=photo_file,
+                id_proof=id_file,
             )
 
         return user

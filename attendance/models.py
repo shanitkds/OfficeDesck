@@ -1,5 +1,6 @@
 from django.db import models
 from account.models import User
+from organizations.models import Oganisation
 
 class Attendance(models.Model):
     
@@ -11,6 +12,7 @@ class Attendance(models.Model):
 )
     
     user=models.ForeignKey(User,on_delete=models.CASCADE)
+    organization=models.ForeignKey(Oganisation,on_delete=models.CASCADE,null=True,blank=True)
     date=models.DateField()
     status=models.CharField(max_length=20,choices=ATTENDANCE_STATUS,default='NOT_MARKED')
     marked_by=models.ForeignKey(User,on_delete=models.SET_NULL,null=True,blank=True,related_name='marked_attendance')

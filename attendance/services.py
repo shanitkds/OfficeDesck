@@ -4,9 +4,10 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 from account.models import User
 
-def get_today_attentance(user):
+def get_today_attentance(user,org):
     attentance,create=Attendance.objects.get_or_create(
         user=user,
+        organization=org,
         date=date.today()
     )
     return attentance
@@ -28,16 +29,16 @@ def get_organisation(user):
             
     
 def mark_attentance(user):
+    org=get_organisation(user)
     if not user.is_attendance_required():
         raise PermissionDenied("Attendance not required for this user")
-    attendance=get_today_attentance(user)
+    attendance=get_today_attentance(user,org)
     
     if attendance.status in ['FULL_DAY', 'HALF_DAY']:
         return attendance
     
     now=timezone.localtime().time()
     
-    org=get_organisation(user)
     if not org:
         raise PermissionDenied("Invalid user type")
     full_time=org.full_day_last_time
@@ -87,6 +88,7 @@ def auto_absent_mark():
         #     continue
         attentence,create=Attendance.objects.get_or_create(
             user=user,
+            organization=org,
             date=today
         )
         

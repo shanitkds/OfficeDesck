@@ -14,6 +14,8 @@ from .serializers import ManualAttendanceUpsertSerializer
 from .services import manual_attendance_upsert
 from datetime import datetime
 from django.db.models import Count
+from django.utils.timezone import now
+
 
 # from organizations.models import Oganisation
 # from django.db.models import Exists, OuterRef
@@ -268,3 +270,17 @@ class AttendanceViewAPI(APIView):
             "attendance": serializer.data,
             "summary": summary
         })
+        
+class TodatyAttentanceAPIView(APIView):
+    def get(self, request):
+        user=request.user
+        org=get_organisation(user)
+        
+        if user.user_type not in ["ORG_ADMIN", "HR","ACCOUNTANT"]:
+            return Response({"error": "not permition"}, status=status.HTTP_403_FORBIDDEN)
+        
+        today = now().date()
+        attentance=Attendance.objects.filter(organization=org,date=today)
+        
+        serializer=AttendanceViewSerializer(attentance,many=True)
+        return Response(serializer.data)

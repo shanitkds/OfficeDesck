@@ -41,7 +41,7 @@ class CreateOrganizationRequest(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request):
-        data = request.data.copy()
+        data = request.data
         data["requested_by"] = request.user.id
 
         serializer = OrganizationRequestSerializer(data=data)

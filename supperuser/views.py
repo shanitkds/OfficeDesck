@@ -97,6 +97,7 @@ class OrganisationDeleteAPIView(APIView):
             return Response({"error": "Permission denied"}, status=403)
 
         org = get_object_or_404(Oganisation, id=org_id)
+        
 
         delete_organisation_with_all(org)
 

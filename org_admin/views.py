@@ -76,47 +76,72 @@ class OrgAdminCreateUserAPIView(APIView):
         return Response(serializer.data)
 
     
-    def patch(self,request,user_id):
+    def patch(self, request, user_id):
+
         if request.user.user_type != "ORG_ADMIN":
-            return Response({"error": "Permission denied"},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Permission denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
-            return Response({"error": "User not found"},
-                            status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # update user fields
         user.name = request.data.get("name", user.name)
         user.email = request.data.get("email", user.email)
         user.phone = request.data.get("phone", user.phone)
-        user.individual_attendance_mode = request.data.get(
-            "attendance_mode",
-            user.individual_attendance_mode
-        )
+
+        if "attendance_mode" in request.data:
+            user.individual_attendance_mode = request.data.get(
+                "attendance_mode"
+            )
+
         user.save()
 
-        # update profile
         profile = None
+
         if hasattr(user, "employee"):
             profile = user.employee
+
         elif hasattr(user, "hr"):
             profile = user.hr
+
         elif hasattr(user, "teamlead"):
             profile = user.teamlead
+
         elif hasattr(user, "accountent"):
             profile = user.accountent
+
         elif hasattr(user, "organisation_admin"):
             profile = user.organisation_admin
-        
 
         if profile:
-            profile.department = request.data.get("department",
-                                                  profile.department)
-            profile.desigination = request.data.get("desigination",
-                                                    profile.desigination)
 
+            # update only if field exists
+            if hasattr(profile, "department"):
+                profile.department = request.data.get(
+                    "department",
+                    profile.department
+                )
+
+            if hasattr(profile, "desigination"):
+                profile.desigination = request.data.get(
+                    "desigination",
+                    profile.desigination
+                )
+
+            if hasattr(profile, "employee_id"):
+                profile.employee_id = request.data.get(
+                    "employee_id",
+                    profile.employee_id
+                )
+
+            # ================= FILE UPLOAD =================
             if request.FILES.get("photo"):
                 profile.photo = request.FILES["photo"]
 
@@ -125,7 +150,10 @@ class OrgAdminCreateUserAPIView(APIView):
 
             profile.save()
 
-        return Response({"message": "User updated successfully"})
+        return Response(
+            {"message": "User updated successfully"},
+            status=status.HTTP_200_OK
+        )
     
     def delete(self, request, user_id):
         if request.user.user_type != "ORG_ADMIN":
